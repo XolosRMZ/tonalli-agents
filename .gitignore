@@ -1,5 +1,13 @@
+# Dependencias
 node_modules/
-.env
+
+# Compilados
 dist/
-coverage/
+
+# Entorno y Secretos
+.env
+.env.*
+
+# Logs
+npm-debug.log*
 *.log

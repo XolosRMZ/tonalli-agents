@@ -1,0 +1,1 @@
+{"version":3,"file":"sessionSigner.d.ts","sourceRoot":"","sources":["sessionSigner.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,iBAAiB,CAAC;AAE3C,MAAM,WAAW,cAAc;IAC7B,KAAK,EAAE,MAAM,CAAC;IACd,WAAW,EAAE,MAAM,CAAC;CACrB;AAED,wBAAsB,kBAAkB,CAAC,MAAM,EAAE,QAAQ,GAAG,OAAO,CAAC,cAAc,CAAC,CAMlF"}
