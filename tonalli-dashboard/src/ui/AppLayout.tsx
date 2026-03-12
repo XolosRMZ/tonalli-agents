@@ -5,6 +5,7 @@ const navigation = [
   { to: "/agents", label: "Agentes" },
   { to: "/treasury", label: "Tesoreria" },
   { to: "/tribunal", label: "Tribunal" },
+  { to: "/system", label: "System" },
   { to: "/commands", label: "Comandos" }
 ];
 

@@ -9,6 +9,11 @@ export default defineConfig({
                 target: "http://127.0.0.1:8787",
                 changeOrigin: true,
                 rewrite: function (path) { return path.replace(/^\/api\/cae/, ""); }
+            },
+            "/api/chronik": {
+                target: process.env.VITE_CHRONIK_URL || "http://127.0.0.1:8331",
+                changeOrigin: true,
+                rewrite: function (path) { return path.replace(/^\/api\/chronik/, ""); }
             }
         }
     }

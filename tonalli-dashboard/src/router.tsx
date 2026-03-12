@@ -3,6 +3,7 @@ import { AppLayout } from "./ui/AppLayout";
 import { AgentsPage } from "./views/AgentsPage";
 import { CommandsPage } from "./views/CommandsPage";
 import { HomePage } from "./views/HomePage";
+import { SystemPage } from "./views/SystemPage";
 import { TreasuryPage } from "./views/TreasuryPage";
 import { TribunalPage } from "./views/TribunalPage";
 
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: "tribunal",
         element: <TribunalPage />
+      },
+      {
+        path: "system",
+        element: <SystemPage />
       },
       {
         path: "commands",
