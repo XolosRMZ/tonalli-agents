@@ -1,12 +1,57 @@
 import fs from "fs";
 import path from "path";
 
+const DRAFT_FILENAME_PATTERN = /^rfc-.*\.md$/;
+const ACTIVE_DRAFT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function getDraftsDir(): string {
+  return path.resolve(__dirname, "../drafts");
+}
+
 function formatTimestamp(date: Date): string {
   return date.toISOString();
 }
 
 function formatFilenameTimestamp(date: Date): string {
   return date.toISOString().replace(/[:.]/g, "-");
+}
+
+export function findLatestDraft(): string | null {
+  const draftsDir = getDraftsDir();
+
+  if (!fs.existsSync(draftsDir)) {
+    return null;
+  }
+
+  const latestDraft = fs
+    .readdirSync(draftsDir)
+    .filter((filename) => DRAFT_FILENAME_PATTERN.test(filename))
+    .map((filename) => {
+      const filePath = path.join(draftsDir, filename);
+      return {
+        filePath,
+        mtimeMs: fs.statSync(filePath).mtimeMs
+      };
+    })
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)[0];
+
+  return latestDraft?.filePath ?? null;
+}
+
+export function hasRecentDraft(now = Date.now()): string | null {
+  const latestDraftPath = findLatestDraft();
+
+  if (!latestDraftPath) {
+    return null;
+  }
+
+  const { mtimeMs } = fs.statSync(latestDraftPath);
+
+  if (now - mtimeMs <= ACTIVE_DRAFT_WINDOW_MS) {
+    return latestDraftPath;
+  }
+
+  return null;
 }
 
 export function generateFundingRFC(
@@ -17,7 +62,7 @@ export function generateFundingRFC(
   const now = new Date();
   const timestamp = formatTimestamp(now);
   const filenameTimestamp = formatFilenameTimestamp(now);
-  const draftsDir = path.resolve(__dirname, "../drafts");
+  const draftsDir = getDraftsDir();
   const outputPath = path.join(draftsDir, `rfc-${filenameTimestamp}.md`);
 
   const markdown = `# RFC - Recarga de Tesorería Operativa

@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import path from "path";
-import { generateFundingRFC } from "./drafter";
+import { generateFundingRFC, hasRecentDraft } from "./drafter";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -68,6 +68,13 @@ export async function runTeyoliaScan(): Promise<void> {
   }
 
   console.log(`${RED}[TEYOLIA] ALERTA: Reservas por debajo del umbral operativo.${RESET}`);
+
+  const activeDraftPath = hasRecentDraft();
+
+  if (activeDraftPath) {
+    console.log(`[TEYOLIA] Existing funding RFC already active: ${activeDraftPath}`);
+    return;
+  }
 
   const draftPath = generateFundingRFC(
     balance.sats,
