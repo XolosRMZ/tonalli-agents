@@ -3,9 +3,12 @@ import { agents, commandLogs } from "../data/mockData";
 import {
   checkCaeStatus,
   fetchCaeStatus,
+  fetchTribunalLogs,
+  getCaeLogsEndpoint,
   getCaeStatusEndpoint,
   type CaeLiveStatus,
-  type CaeStatus
+  type CaeStatus,
+  type TribunalLog
 } from "../services/caeApi";
 import { SectionCard } from "../ui/SectionCard";
 
@@ -17,6 +20,7 @@ export function TribunalPage() {
     detail: "RESPONDING"
   });
   const [caeStatus, setCaeStatus] = useState<CaeStatus | null>(null);
+  const [tribunalLogs, setTribunalLogs] = useState<TribunalLog[]>(commandLogs);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +45,22 @@ export function TribunalPage() {
 
         setCaeStatus(null);
         setLiveStatus(await checkCaeStatus());
+      }
+
+      try {
+        const logs = await fetchTribunalLogs();
+
+        if (!active) {
+          return;
+        }
+
+        setTribunalLogs(logs.length > 0 ? logs : commandLogs);
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setTribunalLogs(commandLogs);
       }
     };
 
@@ -81,12 +101,20 @@ export function TribunalPage() {
           <div className="table-row">
             <div>
               <strong>Decision vigente</strong>
-              <p>Respuesta real mas reciente del motor constitucional</p>
+              <p>Estado real mas reciente del motor constitucional</p>
             </div>
             <div className="badge badge-neutral">
-              {caeStatus?.decision ?? "sin dato"}
+              {caeStatus?.decision ?? liveStatus.detail}
             </div>
             <span>{caeStatus?.summary ?? "Esperando respuesta valida del CAE"}</span>
+          </div>
+          <div className="table-row">
+            <div>
+              <strong>Ruta de logs</strong>
+              <p>Bitacora real obtenida por proxy local de Vite</p>
+            </div>
+            <div className="badge badge-neutral">GET</div>
+            <span>{getCaeLogsEndpoint()}</span>
           </div>
         </div>
       </SectionCard>
@@ -114,10 +142,10 @@ export function TribunalPage() {
 
         <SectionCard
           title="Bitacora del tribunal"
-          subtitle="Secuencia mock de revisiones y mandatos"
+          subtitle="Secuencia real via Tribunal con fallback visual no disruptivo"
         >
           <div className="table-list">
-            {commandLogs.map((log) => (
+            {tribunalLogs.map((log) => (
               <div key={log.id} className="table-row">
                 <div>
                   <strong>{log.id}</strong>

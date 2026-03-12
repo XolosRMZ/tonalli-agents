@@ -1,29 +1,60 @@
 import { useEffect, useState } from "react";
 import { activeIdentity } from "../config/activeIdentity";
 import { agents, commandLogs, treasuryMovements } from "../data/mockData";
-import { checkCaeStatus, type CaeLiveStatus, type CaeStatusDetail } from "../services/caeApi";
+import {
+  checkCaeStatus,
+  fetchTribunalAgents,
+  type CaeLiveStatus,
+  type CaeStatusDetail,
+  type TribunalAgent
+} from "../services/caeApi";
 import { SectionCard } from "../ui/SectionCard";
 import { getCaeStatusCopy } from "../utils/caeStatusUi";
 
 export function HomePage() {
   const [caeDetail, setCaeDetail] = useState<CaeStatusDetail>("OFFLINE");
+  const [featuredAgents, setFeaturedAgents] = useState<TribunalAgent[]>(agents);
 
   useEffect(() => {
+    let active = true;
     const controller = new AbortController();
 
     checkCaeStatus(controller.signal)
       .then((status: CaeLiveStatus) => {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
         setCaeDetail(status.detail);
       })
       .catch(() => {
-        if (controller.signal.aborted) {
+        if (!active || controller.signal.aborted) {
           return;
         }
 
         setCaeDetail("OFFLINE");
       });
 
-    return () => controller.abort();
+    fetchTribunalAgents(controller.signal)
+      .then((liveAgents) => {
+        if (!active || controller.signal.aborted || liveAgents.length === 0) {
+          return;
+        }
+
+        setFeaturedAgents(liveAgents.slice(0, 3));
+      })
+      .catch(() => {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
+        setFeaturedAgents(agents);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const caeStatus = getCaeStatusCopy(caeDetail);
@@ -102,7 +133,7 @@ export function HomePage() {
           subtitle={`Pulso general del roster · ${caeStatus.label}`}
         >
           <div className="table-list">
-            {agents.map((agent) => (
+            {featuredAgents.map((agent) => (
               <div key={agent.id} className="table-row">
                 <div>
                   <strong>{agent.name}</strong>

@@ -1,29 +1,67 @@
 import { useEffect, useState } from "react";
 import { activeIdentity } from "../config/activeIdentity";
 import { agents } from "../data/mockData";
-import { checkCaeStatus, type CaeStatusDetail } from "../services/caeApi";
+import {
+  checkCaeStatus,
+  fetchTribunalAgents,
+  type CaeStatusDetail,
+  type TribunalAgent
+} from "../services/caeApi";
 import { SectionCard } from "../ui/SectionCard";
 import { getCaeStatusCopy } from "../utils/caeStatusUi";
 
 export function AgentsPage() {
   const [caeDetail, setCaeDetail] = useState<CaeStatusDetail>("OFFLINE");
+  const [roster, setRoster] = useState<TribunalAgent[]>(agents);
+  const [usingLiveRoster, setUsingLiveRoster] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const controller = new AbortController();
 
-    checkCaeStatus(controller.signal)
-      .then((status) => {
-        setCaeDetail(status.detail);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) {
+    const loadAgentsPage = async () => {
+      try {
+        const status = await checkCaeStatus(controller.signal);
+
+        if (active) {
+          setCaeDetail(status.detail);
+        }
+      } catch {
+        if (active && !controller.signal.aborted) {
+          setCaeDetail("OFFLINE");
+        }
+      }
+
+      try {
+        const liveAgents = await fetchTribunalAgents(controller.signal);
+
+        if (!active || controller.signal.aborted) {
           return;
         }
 
-        setCaeDetail("OFFLINE");
-      });
+        if (liveAgents.length > 0) {
+          setRoster(liveAgents);
+          setUsingLiveRoster(true);
+          return;
+        }
+      } catch {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+      }
 
-    return () => controller.abort();
+      if (active) {
+        setRoster(agents);
+        setUsingLiveRoster(false);
+      }
+    };
+
+    void loadAgentsPage();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const caeStatus = getCaeStatusCopy(caeDetail);
@@ -51,10 +89,14 @@ export function AgentsPage() {
 
       <SectionCard
         title="Censo de agentes"
-        subtitle="Registro mock de operadores soberanos"
+        subtitle={
+          usingLiveRoster
+            ? "Ciudadanos reales del Tribunal con tolerancia a esquema imperfecto"
+            : "Registro mock de operadores soberanos"
+        }
       >
         <div className="table-list">
-          {agents.map((agent) => (
+          {roster.map((agent) => (
             <div key={agent.id} className="table-row">
               <div>
                 <strong>
