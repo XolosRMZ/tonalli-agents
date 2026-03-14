@@ -17,7 +17,9 @@ const LOGS_PATH = '/v1/logs';
 const PREFLIGHT_PATH = '/v1/preflight/sign';
 const AGENTS_PATH = '/v1/agents';
 const RFC_LATEST_PATH = '/v1/rfc/latest';
+const RFC_CONTENT_LATEST_PATH = '/v1/rfc/content/latest';
 const MAX_LOG_ENTRIES = 200;
+const ACTIVE_RFC_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const serverStartedAt = Date.now();
 const activityLog = [];
@@ -337,7 +339,7 @@ function createHealthPayload() {
     dailyLimitSats: DAILY_LIMIT_SATS,
     agentId: process.env.AGENT_ID || null,
     agentRole: process.env.AGENT_ROLE || null,
-    routes: [HEALTH_PATH, LOGS_PATH, AGENTS_PATH, RFC_LATEST_PATH, PREFLIGHT_PATH],
+    routes: [HEALTH_PATH, LOGS_PATH, AGENTS_PATH, RFC_LATEST_PATH, RFC_CONTENT_LATEST_PATH, PREFLIGHT_PATH],
   };
 }
 
@@ -350,33 +352,48 @@ function createEmptyRfcPayload() {
   };
 }
 
+function getLatestRfcDraftEntry() {
+  const draftsDirectory = path.join(__dirname, 'teyolia-agent', 'drafts');
+
+  if (!fs.existsSync(draftsDirectory)) {
+    return null;
+  }
+
+  const latestEntry = fs.readdirSync(draftsDirectory)
+    .filter((fileName) => fileName.startsWith('rfc-') && fileName.endsWith('.md'))
+    .map((fileName) => {
+      const filePath = path.join(draftsDirectory, fileName);
+      const fileStat = fs.statSync(filePath);
+
+      return {
+        filename: fileName,
+        filePath,
+        timestamp: fileStat.mtimeMs,
+      };
+    })
+    .sort((left, right) => right.timestamp - left.timestamp)[0];
+
+  if (!latestEntry) {
+    return null;
+  }
+
+  const ageMs = Date.now() - latestEntry.timestamp;
+
+  if (ageMs >= ACTIVE_RFC_WINDOW_MS) {
+    return null;
+  }
+
+  return {
+    ...latestEntry,
+    ageMs,
+  };
+}
+
 function readLatestRfcDraft() {
   try {
-    const draftsDirectory = path.join(__dirname, 'teyolia-agent', 'drafts');
-
-    if (!fs.existsSync(draftsDirectory)) {
-      return createEmptyRfcPayload();
-    }
-
-    const latestEntry = fs.readdirSync(draftsDirectory)
-      .filter((fileName) => fileName.startsWith('rfc-') && fileName.endsWith('.md'))
-      .map((fileName) => {
-        const filePath = path.join(draftsDirectory, fileName);
-        const fileStat = fs.statSync(filePath);
-
-        return {
-          filename: fileName,
-          timestamp: fileStat.mtimeMs,
-        };
-      })
-      .sort((left, right) => right.timestamp - left.timestamp)[0];
+    const latestEntry = getLatestRfcDraftEntry();
 
     if (!latestEntry) {
-      return createEmptyRfcPayload();
-    }
-
-    const ageMs = Date.now() - latestEntry.timestamp;
-    if (ageMs >= 86400000) {
       return createEmptyRfcPayload();
     }
 
@@ -384,10 +401,88 @@ function readLatestRfcDraft() {
       status: 'ACTIVE',
       filename: latestEntry.filename,
       timestamp: latestEntry.timestamp,
-      ageMs,
+      ageMs: latestEntry.ageMs,
     };
   } catch {
     return createEmptyRfcPayload();
+  }
+}
+
+function createEmptyRfcContentPayload() {
+  return {
+    ...createEmptyRfcPayload(),
+    title: null,
+    classification: null,
+    origin: null,
+    summary: null,
+    action: null,
+    treasuryAddress: null,
+    protocolSteps: [],
+    note: null,
+  };
+}
+
+function normalizeMarkdownText(value) {
+  return String(value || '')
+    .replace(/`/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractSection(markdown, heading) {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^##\\s+${escapedHeading}\\s*\\n([\\s\\S]*?)(?=^##\\s+|^###\\s+|(?![\\s\\S]))`, 'm');
+  const match = markdown.match(pattern);
+
+  return match ? match[1].trim() : '';
+}
+
+function extractLabeledField(markdown, label) {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\*\\*${escapedLabel}:\\*\\*\\s*(.+)`, 'i');
+  const match = markdown.match(pattern);
+
+  return match ? normalizeMarkdownText(match[1]) : null;
+}
+
+function readLatestRfcContent() {
+  try {
+    const latestEntry = getLatestRfcDraftEntry();
+
+    if (!latestEntry) {
+      return createEmptyRfcContentPayload();
+    }
+
+    const markdown = fs.readFileSync(latestEntry.filePath, 'utf8');
+    const titleMatch = markdown.match(/^#\s+(.+)$/m);
+    const currentStateSection = extractSection(markdown, 'Estado Actual');
+    const actionSection = extractSection(markdown, 'Llamado a la Accion');
+    const protocolSection = extractSection(markdown, 'Protocolo Sugerido');
+    const noteSection = extractSection(markdown, 'Nota Operativa');
+    const addressMatch = actionSection.match(/`([^`]+)`/);
+    const protocolSteps = protocolSection
+      .split(/\r?\n/)
+      .map((line) => line.match(/^\d+\.\s+(.+)$/))
+      .filter(Boolean)
+      .map((match) => normalizeMarkdownText(match[1]));
+
+    return {
+      status: 'ACTIVE',
+      filename: latestEntry.filename,
+      timestamp: latestEntry.timestamp,
+      ageMs: latestEntry.ageMs,
+      title: titleMatch ? normalizeMarkdownText(titleMatch[1]) : latestEntry.filename,
+      classification: extractLabeledField(markdown, 'Clasificacion'),
+      origin: extractLabeledField(markdown, 'Origen'),
+      summary: normalizeMarkdownText(currentStateSection.split(/\r?\n\r?\n/)[0] || currentStateSection) || null,
+      action: normalizeMarkdownText(actionSection.replace(/`[^`]+`/g, '')) || null,
+      treasuryAddress: addressMatch ? normalizeMarkdownText(addressMatch[1]) : null,
+      protocolSteps,
+      note: normalizeMarkdownText(noteSection) || null,
+    };
+  } catch {
+    return createEmptyRfcContentPayload();
   }
 }
 
@@ -448,11 +543,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && urlObject.pathname === RFC_CONTENT_LATEST_PATH) {
+    sendJson(res, 200, readLatestRfcContent());
+    return;
+  }
+
   if (req.method !== 'POST' || urlObject.pathname !== PREFLIGHT_PATH) {
     sendJson(res, 404, {
       ok: false,
       error: 'Not found',
-      expected: [`GET ${HEALTH_PATH}`, `GET ${LOGS_PATH}`, `GET ${AGENTS_PATH}`, `GET ${RFC_LATEST_PATH}`, `POST ${PREFLIGHT_PATH}`],
+      expected: [`GET ${HEALTH_PATH}`, `GET ${LOGS_PATH}`, `GET ${AGENTS_PATH}`, `GET ${RFC_LATEST_PATH}`, `GET ${RFC_CONTENT_LATEST_PATH}`, `POST ${PREFLIGHT_PATH}`],
     });
     return;
   }

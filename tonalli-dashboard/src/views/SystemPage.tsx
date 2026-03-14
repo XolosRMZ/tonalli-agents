@@ -4,9 +4,11 @@ import { treasuryConfig } from "../config/treasury";
 import {
   checkCaeStatus,
   fetchActiveRFC,
+  fetchActiveRFCContent,
   fetchCaeStatus,
   getCaeStatusEndpoint,
   type ActiveRFC,
+  type ActiveRFCContent,
   type CaeLiveStatus,
   type CaeStatus
 } from "../services/caeApi";
@@ -73,6 +75,20 @@ export function SystemPage() {
     timestamp: null,
     ageMs: null
   });
+  const [activeRFCContent, setActiveRFCContent] = useState<ActiveRFCContent>({
+    status: "NONE",
+    filename: null,
+    timestamp: null,
+    ageMs: null,
+    title: null,
+    classification: null,
+    origin: null,
+    summary: null,
+    action: null,
+    treasuryAddress: null,
+    protocolSteps: [],
+    note: null
+  });
   const [caeLiveStatus, setCaeLiveStatus] = useState<CaeLiveStatus>({
     online: false,
     detail: "RESPONDING"
@@ -106,11 +122,12 @@ export function SystemPage() {
       controller.abort();
       controller = new AbortController();
 
-      const [caeResult, chronikResult, treasuryResult, activeRfcResult] = await Promise.allSettled([
+      const [caeResult, chronikResult, treasuryResult, activeRfcResult, activeRfcContentResult] = await Promise.allSettled([
         fetchCaeStatus(controller.signal),
         checkChronikStatus(controller.signal),
         getAddressBalance(activeIdentity.treasuryAddress ?? "", controller.signal),
-        fetchActiveRFC(controller.signal)
+        fetchActiveRFC(controller.signal),
+        fetchActiveRFCContent(controller.signal)
       ]);
 
       if (!active || controller.signal.aborted) {
@@ -165,6 +182,25 @@ export function SystemPage() {
           ageMs: null
         });
       }
+
+      if (activeRfcContentResult.status === "fulfilled") {
+        setActiveRFCContent(activeRfcContentResult.value);
+      } else {
+        setActiveRFCContent({
+          status: "NONE",
+          filename: null,
+          timestamp: null,
+          ageMs: null,
+          title: null,
+          classification: null,
+          origin: null,
+          summary: null,
+          action: null,
+          treasuryAddress: null,
+          protocolSteps: [],
+          note: null
+        });
+      }
     };
 
     void loadStatus();
@@ -180,6 +216,10 @@ export function SystemPage() {
   }, []);
 
   const treasurySignal = getTreasurySignal(treasuryBalance);
+  const activeRfcProtocolSummary =
+    activeRFCContent.status === "ACTIVE" && activeRFCContent.protocolSteps.length > 0
+      ? activeRFCContent.protocolSteps.join(" ")
+      : "No existe un RFC activo para detallar protocolo operativo.";
 
   const infrastructureSignals = [
     {
@@ -330,6 +370,45 @@ export function SystemPage() {
                 {activeRFC.filename ?? "sin dato"}
               </div>
               <span>{activeRFC.filename ?? "No existe un RFC activo para exponer en esta vista."}</span>
+            </div>
+
+            <div className="table-row">
+              <div>
+                <strong>RFC Summary</strong>
+                <p>Sintesis operativa expuesta por `policy-enforcer.js`</p>
+              </div>
+              <div className={`badge badge-${activeRFCContent.status === "ACTIVE" ? "guarded" : "neutral"}`}>
+                {activeRFCContent.title ?? "sin RFC activo"}
+              </div>
+              <span>
+                {activeRFCContent.summary ??
+                  "No hay un RFC activo dentro de la ventana operativa para mostrar resumen institucional."}
+              </span>
+            </div>
+
+            <div className="table-row">
+              <div>
+                <strong>RFC Action</strong>
+                <p>Instruccion operativa principal del ultimo RFC vigente</p>
+              </div>
+              <div className={`badge badge-${activeRFCContent.status === "ACTIVE" ? "guarded" : "neutral"}`}>
+                {activeRFCContent.treasuryAddress ?? activeRFCContent.classification ?? "standby"}
+              </div>
+              <span>
+                {activeRFCContent.action ??
+                  "Sin solicitud activa de fondeo o intervencion institucional en este momento."}
+              </span>
+            </div>
+
+            <div className="table-row">
+              <div>
+                <strong>RFC Protocol</strong>
+                <p>Secuencia minima recomendada para trazabilidad operativa</p>
+              </div>
+              <div className={`badge badge-${activeRFCContent.status === "ACTIVE" ? "guarded" : "neutral"}`}>
+                {activeRFCContent.protocolSteps.length > 0 ? `${activeRFCContent.protocolSteps.length} pasos` : "sin protocolo"}
+              </div>
+              <span>{activeRfcProtocolSummary}</span>
             </div>
           </div>
 

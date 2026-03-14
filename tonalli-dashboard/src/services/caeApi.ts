@@ -18,6 +18,17 @@ export type ActiveRFC = {
   ageMs: number | null;
 };
 
+export type ActiveRFCContent = ActiveRFC & {
+  title: string | null;
+  classification: string | null;
+  origin: string | null;
+  summary: string | null;
+  action: string | null;
+  treasuryAddress: string | null;
+  protocolSteps: string[];
+  note: string | null;
+};
+
 type CaeHealthResponse = {
   ok?: boolean;
   service?: string;
@@ -61,6 +72,7 @@ const HEALTH_PATH = "/v1/health";
 const LOGS_PATH = "/v1/logs";
 const AGENTS_PATH = "/v1/agents";
 const RFC_LATEST_PATH = "/v1/rfc/latest";
+const RFC_CONTENT_LATEST_PATH = "/v1/rfc/content/latest";
 
 function getCaeApiBaseUrl() {
   const configuredBaseUrl = import.meta.env.VITE_CAE_API_BASE_URL;
@@ -88,6 +100,10 @@ export function getCaeLatestRfcEndpoint() {
   return `${getCaeApiBaseUrl()}${RFC_LATEST_PATH}`;
 }
 
+export function getCaeLatestRfcContentEndpoint() {
+  return `${getCaeApiBaseUrl()}${RFC_CONTENT_LATEST_PATH}`;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
 
@@ -107,6 +123,20 @@ function createEmptyActiveRfc(): ActiveRFC {
   };
 }
 
+function createEmptyActiveRfcContent(): ActiveRFCContent {
+  return {
+    ...createEmptyActiveRfc(),
+    title: null,
+    classification: null,
+    origin: null,
+    summary: null,
+    action: null,
+    treasuryAddress: null,
+    protocolSteps: [],
+    note: null
+  };
+}
+
 function normalizeActiveRfc(payload: unknown): ActiveRFC {
   if (!payload || typeof payload !== "object") {
     return createEmptyActiveRfc();
@@ -120,6 +150,30 @@ function normalizeActiveRfc(payload: unknown): ActiveRFC {
     filename: status === "ACTIVE" && typeof record.filename === "string" ? record.filename : null,
     timestamp: typeof record.timestamp === "number" ? record.timestamp : null,
     ageMs: typeof record.ageMs === "number" ? record.ageMs : null
+  };
+}
+
+function normalizeActiveRfcContent(payload: unknown): ActiveRFCContent {
+  if (!payload || typeof payload !== "object") {
+    return createEmptyActiveRfcContent();
+  }
+
+  const record = payload as Record<string, unknown>;
+  const base = normalizeActiveRfc(payload);
+
+  return {
+    ...base,
+    title: base.status === "ACTIVE" && typeof record.title === "string" ? record.title : null,
+    classification: base.status === "ACTIVE" && typeof record.classification === "string" ? record.classification : null,
+    origin: base.status === "ACTIVE" && typeof record.origin === "string" ? record.origin : null,
+    summary: base.status === "ACTIVE" && typeof record.summary === "string" ? record.summary : null,
+    action: base.status === "ACTIVE" && typeof record.action === "string" ? record.action : null,
+    treasuryAddress: base.status === "ACTIVE" && typeof record.treasuryAddress === "string" ? record.treasuryAddress : null,
+    protocolSteps:
+      base.status === "ACTIVE" && Array.isArray(record.protocolSteps)
+        ? record.protocolSteps.filter((step): step is string => typeof step === "string")
+        : [],
+    note: base.status === "ACTIVE" && typeof record.note === "string" ? record.note : null
   };
 }
 
@@ -460,5 +514,18 @@ export async function fetchActiveRFC(signal?: AbortSignal): Promise<ActiveRFC> {
     return normalizeActiveRfc(payload);
   } catch {
     return createEmptyActiveRfc();
+  }
+}
+
+export async function fetchActiveRFCContent(signal?: AbortSignal): Promise<ActiveRFCContent> {
+  try {
+    const payload = await requestJson<unknown>(getCaeLatestRfcContentEndpoint(), {
+      method: "GET",
+      signal
+    });
+
+    return normalizeActiveRfcContent(payload);
+  } catch {
+    return createEmptyActiveRfcContent();
   }
 }
